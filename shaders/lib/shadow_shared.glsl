@@ -36,10 +36,20 @@ vec3 worldToShadowScreenPos(vec3 worldPos, vec3 normal) {
 
   vec4 shadowClipPos = shadowProjection * (shadowModelView * vec4(lockedWorldPos, 1.0));
   shadowClipPos.xyz = distortShadowClipPos(shadowClipPos.xyz);
-  return shadowClipPos.xyz / max(shadowClipPos.w, 1e-6) * 0.5 + 0.5;
+  return shadowClipPos.xyz / max(abs(shadowClipPos.w), 1e-6) * 0.5 + 0.5;
 }
 
 float sampleShadowVisibility(vec3 worldPos, vec3 normal) {
+  vec3 n = normalize(normal);
+  vec3 lightDir = normalize(-shadowLightPosition);
+  float ndotl = max(dot(n, lightDir), 0.0);
+
+  // Quando o sol está raso/atrás da superfície, não há contribuição direta útil.
+  // Evita cintilação de shadow map em vales e ângulos extremos.
+  if (ndotl <= 0.015) {
+    return 1.0;
+  }
+
   vec3 shadowScreenPos = worldToShadowScreenPos(worldPos, normal);
 
   if (shadowScreenPos.x < 0.0 || shadowScreenPos.x > 1.0 ||
@@ -48,8 +58,19 @@ float sampleShadowVisibility(vec3 worldPos, vec3 normal) {
     return 1.0;
   }
 
-  float shadowDepth = texture(shadowtex0, shadowScreenPos.xy).r;
-  return step(shadowScreenPos.z, shadowDepth);
+  vec2 texelSize = 1.0 / vec2(textureSize(shadowtex0, 0));
+  float depthBias = mix(0.0012, 0.00035, ndotl);
+  float compareDepth = shadowScreenPos.z - depthBias;
+
+  // PCF 2x2 estável: reduz flicker sem desfocar demais o estilo voxel.
+  vec2 pcfBase = shadowScreenPos.xy - texelSize * 0.5;
+  float visibility = 0.0;
+  visibility += step(compareDepth, texture(shadowtex0, pcfBase + texelSize * vec2(0.0, 0.0)).r);
+  visibility += step(compareDepth, texture(shadowtex0, pcfBase + texelSize * vec2(1.0, 0.0)).r);
+  visibility += step(compareDepth, texture(shadowtex0, pcfBase + texelSize * vec2(0.0, 1.0)).r);
+  visibility += step(compareDepth, texture(shadowtex0, pcfBase + texelSize * vec2(1.0, 1.0)).r);
+
+  return visibility * 0.25;
 }
 
 float sampleShadowVisibility(vec3 worldPos) {
