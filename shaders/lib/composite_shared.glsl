@@ -261,6 +261,14 @@ vec3 applyVoxelLighting(vec3 albedo, vec3 packedLm, vec3 encodedNormal, vec2 uv)
   float ndl = saturate(dot(n, sunDir));
   float sunMask = sunParallelShadowMask(ndl);
   float shadow = clamp(sampleShadowVisibility(worldPos, n), 0.0, 1.0);
+  // Sombra aplicada em HSV: preserva a saturação e leva o Value a preto.
+  float directStrength = ndl * sunMask;
+  float directBrightness = 1.42;
+  float directSaturationBoost = 1.0 + directStrength * 0.30;
+  vec3 directBase = albedo * vec3(1.65, 1.52, 1.30) * directStrength * directBrightness;
+  vec3 directColor = applyShadowPreserveHueSaturation(directBase, shadow, directSaturationBoost);
+
+  // O pacote calcula a iluminação indireta após criar as sombras.
   float skyVis = saturate(traceSkyVisibility(origin + vec3(0.0, GI_RAY_BIAS * 2.0, 0.0)));
   vec3 bounce = traceVoxelBounce(origin, n, skyVis, albedo);
 
@@ -269,16 +277,8 @@ vec3 applyVoxelLighting(vec3 albedo, vec3 packedLm, vec3 encodedNormal, vec2 uv)
 
   vec3 skyAmbient = vec3(0.0) * skyVis * saturate(n.y * 0.5 + 0.5);
   vec3 bounceLight = bounce * vec3(0.9, 0.95, 1.0) * skyVis;
-
-  // Iluminação indireta em HSV, sem interferir na sombra.
   vec3 indirectLight = skyAmbient + bounceLight + torchLight;
   vec3 indirectColor = applyIndirectLightHSV(albedo, indirectLight);
-  // Sombra aplicada em HSV: preserva a saturação e leva o Value a preto.
-  float directStrength = ndl * sunMask;
-  float directBrightness = 1.42;
-  float directSaturationBoost = 1.0 + directStrength * 0.30;
-  vec3 directBase = albedo * vec3(1.65, 1.52, 1.30) * directStrength * directBrightness;
-  vec3 directColor = applyShadowPreserveHueSaturation(directBase, shadow, directSaturationBoost);
 
   vec3 shaded = indirectColor + directColor;
   shaded = max(shaded, vec3(0.0));
