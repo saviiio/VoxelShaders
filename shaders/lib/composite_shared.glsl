@@ -109,7 +109,7 @@ float traceVoxelRay(vec3 origin, vec3 rayDir, float maxDist, out vec3 hitColor) 
   vec3 nextBoundary = voxelMin + (stepSign * 0.5 + 0.5) * GI_VOXEL_SIZE;
 
   vec3 invDir = 1.0 / max(abs(dir), vec3(1e-5));
-  vec3 tMax = (nextBoundary - pos) / dir;
+  vec3 tMax = (nextBoundary - pos) * invDir;
   vec3 tDelta = GI_VOXEL_SIZE * invDir;
 
   float traveled = 0.0;
